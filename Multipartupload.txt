@@ -1,0 +1,101 @@
+Use high-level aws s3 commands
+To use a high-level aws s3 command for your multipart upload, run the following command:
+
+$ aws s3 cp large_test_file s3://DOC-EXAMPLE-BUCKET/
+This example uses the command aws s3 cp to automatically perform a multipart upload when the object is large. You can also use other aws s3 commands that involve uploading objects into an S3 bucket. For example, aws s3 sync or aws s3 mv.
+
+Objects that you upload as multiple parts to Amazon S3 have a different ETag format than objects that you use the traditional PUT request to upload. To store the MD5 checksum value of the source file as a reference, upload the file with the checksum value as custom metadata. To add the MD5 checksum value as custom metadata, include the optional parameter --metadata md5="examplemd5value1234/4Q" in the upload command:
+
+$ aws s3 cp large_test_file s3://DOC-EXAMPLE-BUCKET/ --metadata md5="examplemd5value1234/4Q"
+To use more of your host's bandwidth and resources, increase the maximum number of concurrent requests that are set in your AWS CLI configuration. By default, the AWS CLI uses 10 maximum concurrent requests. This command sets the maximum concurrent number of requests to 20:
+
+$ aws configure set default.s3.max_concurrent_requests 20
+For more information on configuring the AWS CLI with Amazon S3, see AWS CLI S3 configuration.
+
+Use low-level aws s3api commands
+1.    Split the file that you want to upload into multiple parts. 
+
+Tip: If you're using a Linux operating system, then use the split command.
+
+2.    Run the following command to initiate a multipart upload and to retrieve the associated upload ID. The command returns a response that contains the UploadID:
+
+aws s3api create-multipart-upload --bucket DOC-EXAMPLE-BUCKET --key large_test_file
+3.    Copy the UploadID value as a reference for later steps.
+
+4.    Run the following command to upload the first part of the file. Replace all values with the values for your bucket, file, and multipart upload. The command returns a response that contains an ETag value for the part of the file that you uploaded. For more information on each parameter, see upload-part.
+
+aws s3api upload-part --bucket DOC-EXAMPLE-BUCKET --key large_test_file --part-number 1 --body large_test_file.001 --upload-id exampleTUVGeKAk3Ob7qMynRKqe3ROcavPRwg92eA6JPD4ybIGRxJx9R0VbgkrnOVphZFK59KCYJAO1PXlrBSW7vcH7ANHZwTTf0ovqe6XPYHwsSp7eTRnXB1qjx40Tk --content-md5 exampleaAmjr+4sRXUwf0w==
+5.    Copy the ETag value as a reference for later steps.
+
+6.    Repeat steps 4 and 5 for each part of the file. Make sure to increase the part number with each new part that you upload.
+
+7.    After you upload all the file parts, run the following command to list the uploaded parts and confirm that the list is complete:
+
+aws s3api list-parts --bucket DOC-EXAMPLE-BUCKET --key large_test_file --upload-id exampleTUVGeKAk3Ob7qMynRKqe3ROcavPRwg92eA6JPD4ybIGRxJx9R0VbgkrnOVphZFK59KCYJAO1PXlrBSW7vcH7ANHZwTTf0ovqe6XPYHwsSp7eTRnXB1qjx40Tk
+8.    Compile the ETag values for each file part that you uploaded into a JSON-formatted file.
+
+Example JSON file:
+
+{
+    "Parts": [{
+        "ETag": "example8be9a0268ebfb8b115d4c1fd3",
+        "PartNumber":1
+    },
+
+    ....
+
+    {
+        "ETag": "example246e31ab807da6f62802c1ae8",
+        "PartNumber":4
+    }]
+}
+9.    Name the file fileparts.json.
+
+10.    Run the following command to complete the multipart upload. Replace the value for --multipart-upload with the path to the JSON-formatted file with ETags that you created.
+
+aws s3api complete-multipart-upload --multipart-upload file://fileparts.json --bucket DOC-EXAMPLE-BUCKET --key large_test_file --upload-id exampleTUVGeKAk3Ob7qMynRKqe3ROcavPRwg92eA6JPD4ybIGRxJx9R0VbgkrnOVphZFK59KCYJAO1PXlrBSW7vcH7ANHZwTTf0ovqe6XPYHwsSp7eTRnXB1qjx40Tk
+11.    If the previous command is successful, then you receive a response similar to the following one:
+
+{
+    "ETag": "\\"exampleae01633ff0af167d925cad279-2\\"",
+    "Bucket": "DOC-EXAMPLE-BUCKET",
+    "Location": "https://DOC-EXAMPLE-BUCKET.s3.amazonaws.com/large_test_file",
+   
+    "Key": "large_test_file"
+}
+Resolve upload failures
+If you use the high-level aws s3 commands for a multipart upload and the upload fails, then you must start a new multipart upload. Multipart upload failures occur due to either a timeout or manual cancellation. In most cases, the AWS CLI automatically cancels the multipart upload and then removes any multipart files that you created. This process can take several minutes. If you use aws s3api commands and the process is interrupted, then remove incomplete parts of the upload, and then re-upload the parts.
+
+To remove the incomplete parts, use the AbortIncompleteMultipartUpload lifecycle action. Or, use aws s3api commands to remove the incomplete parts:
+
+1.    Run the following command to list incomplete multipart file uploads. Replace the value for --bucket with the name of your bucket.
+
+aws s3api list-multipart-uploads --bucket DOC-EXAMPLE-BUCKET
+2.    The command returns a message similar to the following one with any file parts that weren't processed:
+
+{
+    "Uploads": [
+        {
+           
+    "Initiator": {
+                "DisplayName": "multipartmessage",
+                "ID": "290xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    "
+            },
+            "Initiated": "2016-03-31T06:13:15.000Z",
+           
+    "UploadId": "examplevQpHp7eHc_J5s9U.kzM3GAHeOJh1P8wVTmRqEVojwiwu3wPX6fWYzADNtOHklJI6W6Q9NJUYgjePKCVpbl_rDP6mGIr2AQJNKB_A-",
+            "StorageClass": "STANDARD",
+           
+    "Key": "",
+            "Owner": {
+                "DisplayName": "multipartmessage",
+               
+    "ID": "290xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx "
+            }
+        }
+   ]
+}
+3.    Run the following command to remove the incomplete parts:
+
+aws s3api abort-multipart-upload --bucket DOC-EXAMPLE-BUCKET --key large_test
